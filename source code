@@ -1,0 +1,1365 @@
+#!/usr/bin/env python3
+"""
+================================================================================
+🌱 AgroRescue: AI-Powered Agricultural Surplus Recovery and Income Generation Platform
+================================================================================
+Tagline: "Save the produce. Recover the value. Empower farmers."
+Hackathon Theme: Rural Development and Livelihood
+Target SDGs: SDG 1 (No Poverty), SDG 2 (Zero Hunger), SDG 8 (Decent Work),
+             SDG 9 (Industry & Innovation), SDG 12 (Responsible Consumption)
+License: MIT License (Full text included below)
+
+================================================================================
+📖 ARCHITECTURE DOCUMENTATION
+================================================================================
+AgroRescue connects rural smallholders, market vendors, and Women Self-Help
+Groups (SHGs) facing perishable produce oversupply with commercial buyers,
+food processing units, and local transport operators before spoilage occurs.
+
+System Topology:
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                            CLIENT TIER (BROWSER)                             │
+│  - Bilingual Responsive Web UI (English / தமிழ் - Tamil)                    │
+│  - One-Click Hackathon Scenarios (Ayudha Pooja gluts, Salem Mangoes, Flowers)│
+│  - Browser SpeechRecognition (ta-IN / en-IN) with Automatic Entity Parsing   │
+│  - Produce Camera Capture & Visual Inspection Checklist                      │
+│  - Transparent Net-Return Economics Calculator (Gross - Transport - Fees)    │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       │ HTTP REST JSON / Multipart
+┌──────────────────────────────────────▼───────────────────────────────────────┐
+│                          APPLICATION & API TIER                              │
+│  - Dual-Engine Server: FastAPI (High performance + Swagger /docs)            │
+│                       Stdlib http.server fallback (Zero-dependency run)      │
+│  - Input Validation & Sanitization (Lat/Lon ranges, Positive economics)       │
+│  - File Upload Streamer (8 MB cap, path traversal protection)                │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       │
+┌──────────────────────────────────────▼───────────────────────────────────────┐
+│                        SERVICES & MATCHING ENGINES                           │
+│  1. Geospatial Engine: Haversine great-circle distance (km)                 │
+│  2. Buyer Matcher: Filter by crop, condition, buyer capacity >= quantity,    │
+│                    and distance <= 100km. Rank by Estimated Net Return (₹).   │
+│  3. Logistics Matcher: Filter by available status, capacity, and distance.   │
+│                        Rank by Estimated Transport Fare (₹).                 │
+│  4. Economics Engine: Net Return = (Qty * Offer) - Transport - Handling - Fee│
+│  5. Visual Assessment Checklist: Safe rule-based physical quality indicators │
+│                                  (Honest placeholder, not trained AI)       │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       │
+┌──────────────────────────────────────▼───────────────────────────────────────┐
+│                              DATA PERSISTENCE                                │
+│  - Embedded reference datasets (Buyers, Drivers, Surplus Listings)          │
+│  - Fully self-contained single-file runtime with zero external file needs   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Mathematical Models:
+1. Haversine Great-Circle Distance:
+   a = sin²(Δlat / 2) + cos(lat1) * cos(lat2) * sin²(Δlon / 2)
+   d = 2 * R * atan2(√a, √(1 - a))  where R = 6371.0 km
+
+2. Net Return Economics:
+   Gross Revenue = Quantity (kg) * Buyer Offer (₹/kg)
+   Total Costs   = Transport Cost + Handling Cost + Platform Fee
+   Net Return    = Gross Revenue - Total Costs
+   Net Return/kg = Net Return / Quantity (kg)
+
+================================================================================
+🚀 DETAILED SETUP & RUN INSTRUCTIONS
+================================================================================
+Method A: Run with FastAPI & Uvicorn (Recommended for Swagger UI)
+1. Install dependencies:
+   pip install fastapi uvicorn pydantic python-multipart
+2. Start the server:
+   python agrorescue_complete.py
+3. Open in browser:
+   - Web Application: http://127.0.0.1:8000
+   - Interactive Swagger API Docs: http://127.0.0.1:8000/docs
+   - Health Status: http://127.0.0.1:8000/api/health
+
+Method B: Run with Zero Dependencies (Standard Python 3.8+)
+1. No pip install required! Simply run:
+   python agrorescue_complete.py
+   (The script automatically detects if FastAPI is absent and falls back to
+    Python's built-in http.server, serving the full web app & all JSON APIs!)
+
+Method C: Run Embedded Automated Test Suite
+   python agrorescue_complete.py --test
+
+================================================================================
+📦 GITHUB REPOSITORY PUBLISHING INSTRUCTIONS FOR HACKATHON
+================================================================================
+1. Create a new public repository on GitHub named: agrorescue
+2. In your project directory, run:
+   git init
+   git add agrorescue_complete.py
+   git commit -m "AgroRescue: AI-Powered Agricultural Surplus Recovery Platform"
+   git branch -M main
+   git remote add origin https://github.com/YOUR-USERNAME/agrorescue.git
+   git push -u origin main
+3. Your submission link: https://github.com/YOUR-USERNAME/agrorescue
+
+================================================================================
+📜 MIT LICENSE
+================================================================================
+MIT License
+
+Copyright (c) 2026 AgroRescue Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+================================================================================
+"""
+
+import sys
+import os
+import json
+import math
+from pathlib import Path
+from typing import Dict, Any, List
+
+# Ensure safe console output across all Windows / Linux / macOS terminals
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+# ==============================================================================
+# SECTION 1: EMBEDDED SAMPLE DATASETS (Fictional Demo Records)
+# ==============================================================================
+SAMPLE_BUYERS = [
+    {
+        "id": "B001",
+        "name": "Coimbatore Bulk Vegetable Buyer",
+        "crops": ["Vegetables", "Tomato"],
+        "accepted_conditions": ["Fresh / saleable", "Needs inspection"],
+        "capacity_kg": 1500,
+        "lat": 11.0168,
+        "lon": 76.9558,
+        "offer_per_kg": 10.5,
+        "estimated_transport_cost": 250,
+        "estimated_handling_cost": 100
+    },
+    {
+        "id": "B002",
+        "name": "Coimbatore Caterer Supply",
+        "crops": ["Vegetables", "Tomato", "Banana"],
+        "accepted_conditions": ["Fresh / saleable"],
+        "capacity_kg": 500,
+        "lat": 11.0302,
+        "lon": 76.9601,
+        "offer_per_kg": 11.0,
+        "estimated_transport_cost": 180,
+        "estimated_handling_cost": 75
+    },
+    {
+        "id": "B003",
+        "name": "Salem Mango Pulp Processor",
+        "crops": ["Mango"],
+        "accepted_conditions": ["Ripe / suitable for processing"],
+        "capacity_kg": 5000,
+        "lat": 11.6643,
+        "lon": 78.1460,
+        "offer_per_kg": 13.0,
+        "estimated_transport_cost": 600,
+        "estimated_handling_cost": 250
+    },
+    {
+        "id": "B004",
+        "name": "Salem Fresh Fruit Wholesaler",
+        "crops": ["Mango"],
+        "accepted_conditions": ["Fresh / saleable"],
+        "capacity_kg": 1000,
+        "lat": 11.6700,
+        "lon": 78.1500,
+        "offer_per_kg": 15.0,
+        "estimated_transport_cost": 350,
+        "estimated_handling_cost": 100
+    },
+    {
+        "id": "B005",
+        "name": "Flower Product SHG Demo",
+        "crops": ["Flowers"],
+        "accepted_conditions": ["Fresh / saleable"],
+        "capacity_kg": 300,
+        "lat": 11.0200,
+        "lon": 76.9600,
+        "offer_per_kg": 5.0,
+        "estimated_transport_cost": 150,
+        "estimated_handling_cost": 50
+    },
+    {
+        "id": "B006",
+        "name": "Tomato Processing Unit",
+        "crops": ["Tomato", "Vegetables"],
+        "accepted_conditions": ["Ripe / suitable for processing", "Needs inspection"],
+        "capacity_kg": 2000,
+        "lat": 11.0250,
+        "lon": 76.9700,
+        "offer_per_kg": 6.5,
+        "estimated_transport_cost": 300,
+        "estimated_handling_cost": 120
+    }
+]
+
+SAMPLE_DRIVERS = [
+    {
+        "id": "D001",
+        "name": "Driver Demo A (M. Kumar)",
+        "vehicle": "Mini truck (Tata Ace)",
+        "capacity_kg": 1000,
+        "lat": 11.0200,
+        "lon": 76.9600,
+        "base_fee": 150,
+        "rate_per_km": 22,
+        "available": True,
+        "phone": "+91 98765 43210 (Demo)"
+    },
+    {
+        "id": "D002",
+        "name": "Driver Demo B (S. Murugan)",
+        "vehicle": "Pickup van (Bolero)",
+        "capacity_kg": 500,
+        "lat": 11.0100,
+        "lon": 76.9500,
+        "base_fee": 100,
+        "rate_per_km": 18,
+        "available": True,
+        "phone": "+91 98765 43211 (Demo)"
+    },
+    {
+        "id": "D003",
+        "name": "Driver Demo C (R. Velu)",
+        "vehicle": "Light Commercial Vehicle",
+        "capacity_kg": 2500,
+        "lat": 11.6700,
+        "lon": 78.1400,
+        "base_fee": 250,
+        "rate_per_km": 24,
+        "available": True,
+        "phone": "+91 98765 43212 (Demo)"
+    },
+    {
+        "id": "D004",
+        "name": "Driver Demo D (Unavailable)",
+        "vehicle": "Mini truck",
+        "capacity_kg": 800,
+        "lat": 11.6600,
+        "lon": 78.1500,
+        "base_fee": 140,
+        "rate_per_km": 20,
+        "available": False,
+        "phone": "Unavailable"
+    }
+]
+
+SAMPLE_LISTINGS = [
+    {
+        "id": "L001",
+        "crop": "Vegetables",
+        "quantity_kg": 250,
+        "condition": "Fresh / saleable",
+        "location_name": "Coimbatore demo market",
+        "lat": 11.0168,
+        "lon": 76.9558,
+        "asking_price_per_kg": 12,
+        "urgency_hours": 12
+    },
+    {
+        "id": "L002",
+        "crop": "Mango",
+        "quantity_kg": 600,
+        "condition": "Ripe / suitable for processing",
+        "location_name": "Salem demo collection point",
+        "lat": 11.6643,
+        "lon": 78.1460,
+        "asking_price_per_kg": 11,
+        "urgency_hours": 24
+    },
+    {
+        "id": "L003",
+        "crop": "Flowers",
+        "quantity_kg": 80,
+        "condition": "Fresh / saleable",
+        "location_name": "Coimbatore demo market",
+        "lat": 11.0168,
+        "lon": 76.9558,
+        "asking_price_per_kg": 6,
+        "urgency_hours": 6
+    }
+]
+
+# ==============================================================================
+# SECTION 2: MATHEMATICAL & LOGICAL ALGORITHMS
+# ==============================================================================
+def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in km between two lat/lon coordinates."""
+    r = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
+    return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+def net_return(quantity_kg: float, offer_per_kg: float, transport_cost: float = 0.0, handling_cost: float = 0.0, platform_fee: float = 0.0) -> Dict[str, float]:
+    """Calculates gross revenue, costs, and net return per transaction."""
+    vals = [quantity_kg, offer_per_kg, transport_cost, handling_cost, platform_fee]
+    if any(v < 0 for v in vals):
+        raise ValueError("Financial and quantity values must be non-negative")
+    gross = float(quantity_kg) * float(offer_per_kg)
+    costs = float(transport_cost) + float(handling_cost) + float(platform_fee)
+    net = gross - costs
+    per_kg = round(net / quantity_kg, 2) if quantity_kg > 0 else 0.0
+    return {
+        "gross_revenue": round(gross, 2),
+        "total_costs": round(costs, 2),
+        "net_return": round(net, 2),
+        "net_return_per_kg": per_kg
+    }
+
+def find_buyer_matches(listing: Dict[str, Any], buyers: List[Dict[str, Any]] = None, max_distance_km: float = 100.0) -> List[Dict[str, Any]]:
+    """Filters and ranks buyers by estimated net return within max_distance_km."""
+    if buyers is None:
+        buyers = SAMPLE_BUYERS
+    matches = []
+    listing_crop = str(listing.get("crop", "")).strip().lower()
+    listing_cond = str(listing.get("condition", "")).strip().lower()
+    quantity_kg = float(listing.get("quantity_kg", 0))
+
+    for buyer in buyers:
+        buyer_crops = [str(c).strip().lower() for c in buyer.get("crops", [])]
+        if listing_crop not in buyer_crops:
+            continue
+
+        buyer_conditions = [str(c).strip().lower() for c in buyer.get("accepted_conditions", [])]
+        if listing_cond not in buyer_conditions:
+            continue
+
+        capacity = float(buyer.get("capacity_kg", 0))
+        if capacity < quantity_kg:
+            continue
+
+        try:
+            b_lat = float(buyer["lat"])
+            b_lon = float(buyer["lon"])
+            l_lat = float(listing["lat"])
+            l_lon = float(listing["lon"])
+        except (KeyError, ValueError, TypeError):
+            continue
+
+        distance = haversine_km(l_lat, l_lon, b_lat, b_lon)
+        if distance > max_distance_km:
+            continue
+
+        offer = float(buyer.get("offer_per_kg", 0))
+        default_transport = max(150.0, round(distance * 18.0, 2))
+        transport = float(buyer.get("estimated_transport_cost") or default_transport)
+        handling = float(buyer.get("estimated_handling_cost", 0.0))
+        economics = net_return(quantity_kg, offer, transport, handling)
+
+        matches.append({
+            "buyer_id": buyer.get("id", "Unknown"),
+            "buyer_name": buyer.get("name", "Unnamed Buyer"),
+            "distance_km": round(distance, 1),
+            "offer_per_kg": round(offer, 2),
+            "estimated_transport_cost": round(transport, 2),
+            "estimated_net_return": economics["net_return"],
+            "condition_fit": True,
+            "capacity_kg": capacity,
+            "note": "Illustrative match only; confirm stock, grade, price, pickup and payment."
+        })
+
+    return sorted(matches, key=lambda m: (-m["estimated_net_return"], m["distance_km"]))
+
+def find_transport_matches(listing: Dict[str, Any], drivers: List[Dict[str, Any]] = None, max_distance_km: float = 100.0) -> List[Dict[str, Any]]:
+    """Filters active drivers with sufficient capacity and ranks by lowest cost."""
+    if drivers is None:
+        drivers = SAMPLE_DRIVERS
+    matches = []
+    quantity_kg = float(listing.get("quantity_kg", 0))
+
+    for driver in drivers:
+        if driver.get("available") is not True:
+            continue
+
+        capacity = float(driver.get("capacity_kg", 0))
+        if capacity < quantity_kg:
+            continue
+
+        try:
+            d_lat = float(driver["lat"])
+            d_lon = float(driver["lon"])
+            l_lat = float(listing["lat"])
+            l_lon = float(listing["lon"])
+        except (KeyError, ValueError, TypeError):
+            continue
+
+        distance = haversine_km(l_lat, l_lon, d_lat, d_lon)
+        if distance > max_distance_km:
+            continue
+
+        base_fee = float(driver.get("base_fee", 0))
+        rate_per_km = float(driver.get("rate_per_km", 0))
+        est_cost = base_fee + (distance * rate_per_km)
+
+        matches.append({
+            "driver_id": driver.get("id", "Unknown"),
+            "driver_name": driver.get("name", "Unnamed Driver"),
+            "vehicle": driver.get("vehicle", "Mini truck"),
+            "capacity_kg": capacity,
+            "distance_km": round(distance, 1),
+            "estimated_cost": round(est_cost, 2),
+            "phone": driver.get("phone", "Not provided"),
+            "note": "Demo profile; verify identity, vehicle documents, availability and final fare."
+        })
+
+    return sorted(matches, key=lambda m: (m["estimated_cost"], m["distance_km"]))
+
+def preliminary_image_assessment(filename: str, content_type: str, file_size: int) -> Dict[str, Any]:
+    """Safe rule-based inspection checklist (honest prototype disclaimer)."""
+    if not content_type or not content_type.startswith("image/"):
+        raise ValueError("Upload must be an image (e.g. image/jpeg, image/png)")
+    if file_size <= 0:
+        raise ValueError("Image is empty (0 bytes)")
+
+    safe_name = Path(filename).name if filename else "upload.jpg"
+    return {
+        "status": "demo_placeholder",
+        "filename": safe_name,
+        "file_size_bytes": file_size,
+        "visible_quality_estimate": "Visual inspection checklist generated (Not assessed by a trained model)",
+        "possible_visual_checks": [
+            "Surface bruising or mechanical transit cuts",
+            "Abnormal discolouration or uneven pigment",
+            "Shrivelling / moisture loss",
+            "Visible fungal growth or surface mould"
+        ],
+        "recommended_next_step": "Ask seller to confirm variety and harvest date; arrange physical inspection by buyer.",
+        "warning": "A photo cannot certify food safety or detect internal rot, pesticide residues, or microbial contamination."
+    }
+
+# ==============================================================================
+# SECTION 3: EMBEDDED COMPLETE BILINGUAL FRONTEND (HTML / CSS / JS)
+# ==============================================================================
+HTML_CONTENT = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgroRescue | Agricultural Surplus Recovery Platform</title>
+  <style>
+    :root {
+      --green-dark: #1b4d32;
+      --green-primary: #266b44;
+      --green-light: #348a58;
+      --green-pale: #eef6f1;
+      --amber-dark: #8a5300;
+      --amber-bg: #fff8e8;
+      --amber-border: #f3d499;
+      --ink: #1c2b22;
+      --muted: #53665a;
+      --line: #d8e5dc;
+      --card-bg: #ffffff;
+      --bg-page: #f6faf7;
+      --shadow-sm: 0 2px 6px rgba(27, 77, 50, 0.06);
+      --shadow-md: 0 6px 20px rgba(27, 77, 50, 0.09);
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-page);
+      color: var(--ink);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+    }
+    .wrap { width: min(1080px, 92%); margin: auto; }
+    header {
+      background: linear-gradient(130deg, var(--green-dark), #1d5a39);
+      color: white;
+      padding: 26px 0;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    }
+    .header-inner { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+    .eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.14em; color: #a7e0ba; }
+    h1 { font-size: clamp(2rem, 4.5vw, 2.6rem); font-weight: 800; letter-spacing: -0.02em; }
+    .subtitle { font-size: 0.95rem; color: #d8f3e2; margin-top: 4px; }
+    .tagline { color: #ffd88a; font-weight: 700; font-size: 0.92rem; margin-top: 4px; }
+    .btn-lang {
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.88rem;
+    }
+    .btn-lang:hover { background: rgba(255, 255, 255, 0.28); }
+    main { padding: 22px 0 40px; }
+    .notice-banner {
+      background: var(--amber-bg);
+      border: 1px solid var(--amber-border);
+      color: var(--amber-dark);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 12px;
+      font-size: 0.88rem;
+    }
+    .nav-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+    .nav-pills a {
+      background: white;
+      border: 1px solid var(--line);
+      color: var(--green-primary);
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.84rem;
+      padding: 7px 14px;
+      border-radius: 999px;
+    }
+    .nav-pills a:hover { background: var(--green-pale); }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 22px;
+      margin-bottom: 22px;
+      box-shadow: var(--shadow-sm);
+    }
+    .badge {
+      display: inline-block;
+      background: var(--green-pale);
+      color: var(--green-dark);
+      font-size: 0.72rem;
+      font-weight: 800;
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin-bottom: 6px;
+      border: 1px solid #c9e4d1;
+    }
+    h2 { font-size: 1.35rem; color: var(--green-dark); font-weight: 750; }
+    .panel-sub { font-size: 0.88rem; color: var(--muted); margin-top: 4px; }
+    .preset-box {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 16px 0;
+      background: var(--green-pale); padding: 10px 14px; border-radius: 10px; border: 1px dashed #bddbc5;
+    }
+    .preset-label { font-size: 0.82rem; font-weight: 750; color: var(--green-dark); }
+    .btn-chip {
+      background: white; border: 1px solid #bddbc5; color: var(--green-dark);
+      font-size: 0.8rem; font-weight: 650; padding: 5px 11px; border-radius: 999px; cursor: pointer;
+    }
+    .btn-chip:hover { background: var(--green-primary); color: white; }
+    .grid-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .form-group { display: flex; flex-direction: column; }
+    label { font-size: 0.85rem; font-weight: 650; color: var(--muted); margin-bottom: 5px; }
+    input, select, textarea {
+      width: 100%; padding: 10px 12px; border: 1px solid #cbdcd1; border-radius: 8px;
+      font-size: 0.92rem; color: var(--ink); background: white;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--green-primary); }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 11px 20px; border-radius: 8px; font-size: 0.92rem; font-weight: 750;
+      cursor: pointer; border: none; transition: 0.2s;
+    }
+    .btn-primary { background: var(--green-primary); color: white; margin-top: 14px; }
+    .btn-secondary { background: #395c47; color: white; }
+    .btn-accent { background: #bf5b04; color: white; }
+    .btn-outline { background: white; border: 1.5px solid var(--green-primary); color: var(--green-primary); }
+    .status-msg { margin-top: 14px; padding: 12px 16px; border-radius: 8px; font-size: 0.88rem; background: var(--green-pale); color: var(--green-dark); }
+    .status-msg.error { background: #fdeeee; color: #9c2727; }
+    .status-msg.loading { background: #eef3ff; color: #27479c; }
+    .hidden { display: none !important; }
+    .table-responsive { width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; margin-top: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left; }
+    thead { background: var(--green-pale); }
+    th { padding: 11px 12px; font-weight: 750; color: var(--green-dark); border-bottom: 1.5px solid #d0e2d5; white-space: nowrap; }
+    td { padding: 11px 12px; border-bottom: 1px solid var(--line); color: var(--ink); }
+    .rank-pill { background: #2b7a4b; color: white; font-weight: 800; font-size: 0.72rem; border-radius: 4px; padding: 2px 6px; margin-right: 6px; }
+    .return-highlight { font-weight: 800; color: #176537; }
+    .demo-tag { font-size: 0.7rem; background: #fff3d6; color: #8c5300; padding: 2px 7px; border-radius: 4px; font-weight: 700; margin-top: 8px; display: inline-block; }
+    .placeholder-box { background: #fafcfa; border: 1px dashed var(--line); border-radius: 8px; padding: 24px; text-align: center; color: var(--muted); }
+    .preview-box { margin-top: 8px; max-width: 340px; }
+    .preview-img { width: 100%; max-height: 260px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+    .inspection-card { margin-top: 16px; background: white; border: 1px solid var(--line); border-left: 5px solid var(--green-primary); border-radius: 8px; padding: 16px; }
+    .checklist { list-style: none; margin: 10px 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+    .checklist li { font-size: 0.85rem; background: var(--green-pale); padding: 6px 10px; border-radius: 6px; }
+    .safety-warning { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber-dark); padding: 10px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 650; margin-top: 10px; }
+    .voice-controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+    .income-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 10px; }
+    .income-stat { background: white; padding: 12px 14px; border-radius: 8px; border: 1px solid #d4e5d9; }
+    .income-stat-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; font-weight: 750; }
+    .income-stat-val { font-size: 1.4rem; font-weight: 850; color: var(--green-dark); margin-top: 4px; }
+    .income-stat.highlight { background: #ebf7ee; border-color: #92d8a6; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+    .metric-card { background: var(--green-pale); border: 1px solid #d0e4d7; padding: 16px; border-radius: 10px; text-align: center; }
+    .metric-unit { font-size: 1.6rem; font-weight: 850; color: var(--green-dark); display: block; }
+    .metric-label { font-size: 0.82rem; color: var(--muted); margin-top: 4px; display: block; font-weight: 650; }
+    .sdg-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .sdg-badge { background: white; border: 1px solid #b7d6c1; color: var(--green-dark); font-size: 0.78rem; font-weight: 750; padding: 5px 12px; border-radius: 999px; }
+    footer { border-top: 1px solid var(--line); background: white; padding: 22px 0; color: var(--muted); font-size: 0.85rem; text-align: center; }
+    @media (max-width: 768px) {
+      .grid-fields, .metrics-grid, .income-grid, .checklist { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap header-inner">
+    <div>
+      <p class="eyebrow" data-en="RURAL DEVELOPMENT • SOCIAL IMPACT • AI-ASSISTED" data-ta="ஊரக வளர்ச்சி • சமூக தாக்கம் • செயற்கை நுண்ணறிவு உதவி">RURAL DEVELOPMENT • SOCIAL IMPACT • AI-ASSISTED</p>
+      <h1>🌱 AgroRescue</h1>
+      <p class="subtitle" data-en="Agricultural Surplus Recovery and Income Generation Platform" data-ta="விவசாய உபரி மீட்பு மற்றும் வருமான உருவாக்க தளம்">Agricultural Surplus Recovery and Income Generation Platform</p>
+      <p class="tagline" data-en="“Save the produce. Recover the value. Empower farmers.”" data-ta="“விளைபொருளை காப்போம். மதிப்பைப் பெறுவோம். விவசாயிகளை உயர்த்துவோம்.”">“Save the produce. Recover the value. Empower farmers.”</p>
+    </div>
+    <button id="langToggle" class="btn-lang">🌐 தமிழ் (Tamil)</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="notice-banner">
+    <div style="font-size:1.3rem">⚠️</div>
+    <div>
+      <strong data-en="Hackathon Prototype Notice:" data-ta="ஹேக்கத்தான் மாதிரி அறிவிப்பு:">Hackathon Prototype Notice:</strong>
+      <span data-en=" Buyer and driver records are fictional demo data. Visual photo assessment is an honest rule-based checklist, not a trained AI model or food-safety certification. Always verify offers, weights, physical produce quality, and payment terms offline." data-ta=" வாங்குபவர் மற்றும் ஓட்டுநர் விவரங்கள் மாதிரித் தரவுகள் மட்டுமே. புகைப்பட ஆய்வு ஆரம்ப நிலை சரிபார்ப்பு மட்டுமே; இது ஆய்வக சான்றிதழ் அல்ல. உண்மையான தரம், விலை, போக்குவரத்து மற்றும் பணம் செலுத்துதலை உறுதிசெய்து கொள்ளவும்."> Buyer and driver records are fictional demo data. Visual photo assessment is an honest rule-based checklist, not a trained AI model or food-safety certification. Always verify offers, weights, physical produce quality, and payment terms offline.</span>
+    </div>
+  </div>
+
+  <nav class="nav-pills">
+    <a href="#list" data-en="1. List Surplus" data-ta="1. உபரி பதிவு">1. List Surplus</a>
+    <a href="#buyers" data-en="2. Buyer Matches" data-ta="2. வாங்குபவர் பரிந்துரை">2. Buyer Matches</a>
+    <a href="#transport" data-en="3. Transport" data-ta="3. போக்குவரத்து">3. Transport</a>
+    <a href="#image" data-en="4. Photo Inspection" data-ta="4. புகைப்பட ஆய்வு">4. Photo Inspection</a>
+    <a href="#voice" data-en="5. Voice Listing" data-ta="5. குரல் பதிவு">5. Voice Listing</a>
+    <a href="#income" data-en="6. Net Return" data-ta="6. நிகர வருமானம்">6. Net Return</a>
+    <a href="#impact" data-en="7. Impact & SDGs" data-ta="7. தாக்கம் & SDGs">7. Impact & SDGs</a>
+  </nav>
+
+  <!-- Step 1: Surplus Form -->
+  <section class="card" id="list">
+    <span class="badge">Step 1 / படி 1</span>
+    <h2 data-en="Register Surplus Perishable Produce" data-ta="அழுகக்கூடிய உபரி விளைபொருட்களை பதிவு செய்க">Register Surplus Perishable Produce</h2>
+    <p class="panel-sub" data-en="Enter details of your surplus batch to discover feasible buyers and transport options within 100 km." data-ta="100 கி.மீ சுற்றளவில் உள்ள வாங்குபவர்களையும் போக்குவரத்து வாய்ப்புகளையும் கண்டறிய விவரங்களை உள்ளிடவும்.">Enter details of your surplus batch to discover feasible buyers and transport options within 100 km.</p>
+
+    <div class="preset-box">
+      <span class="preset-label" data-en="Quick Scenarios:" data-ta="மாதிரி காட்சிகள்:">Quick Scenarios:</span>
+      <button type="button" class="btn-chip" id="presetAyudha" data-en="🌾 Ayudha Pooja Surplus (Coimbatore)" data-ta="🌾 ஆயுதபூஜை காய்கறி உபரி (கோவை)">🌾 Ayudha Pooja Surplus (Coimbatore)</button>
+      <button type="button" class="btn-chip" id="presetMango" data-en="🥭 Salem Mango Surplus (Processing)" data-ta="🥭 சேலம் மாம்பழ உபரி (பதப்படுத்துதல்)">🥭 Salem Mango Surplus (Processing)</button>
+      <button type="button" class="btn-chip" id="presetFlower" data-en="🌸 Seasonal Flower Surplus (Market)" data-ta="🌸 மலர் உபரி (கோவை சந்தை)">🌸 Seasonal Flower Surplus (Market)</button>
+    </div>
+
+    <form id="listingForm">
+      <div class="grid-fields">
+        <div class="form-group">
+          <label for="crop" data-en="Crop / Produce" data-ta="பயிர் / விளைபொருள்">Crop / Produce</label>
+          <select id="crop">
+            <option value="Vegetables">Vegetables (Mixed)</option>
+            <option value="Tomato">Tomato</option>
+            <option value="Mango">Mango</option>
+            <option value="Banana">Banana</option>
+            <option value="Flowers">Flowers</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="qty" data-en="Surplus Quantity (kg)" data-ta="உபரி அளவு (கிலோ)">Surplus Quantity (kg)</label>
+          <input id="qty" type="number" min="1" max="1000000" value="200" required>
+        </div>
+        <div class="form-group">
+          <label for="condition" data-en="Observed Condition" data-ta="விளைபொருள் தரம்">Observed Condition</label>
+          <select id="condition">
+            <option value="Fresh / saleable">Fresh / saleable</option>
+            <option value="Ripe / suitable for processing">Ripe / suitable for processing</option>
+            <option value="Needs inspection">Needs inspection</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="location" data-en="Location / Market Name" data-ta="இடம் / சந்தை பெயர்">Location / Market Name</label>
+          <input id="location" type="text" value="Coimbatore" required>
+        </div>
+        <div class="form-group">
+          <label for="lat" data-en="Latitude" data-ta="அட்சரேகை (Latitude)">Latitude</label>
+          <input id="lat" type="number" step="any" min="-90" max="90" value="11.0168" required>
+        </div>
+        <div class="form-group">
+          <label for="lon" data-en="Longitude" data-ta="தீர்க்கரேகை (Longitude)">Longitude</label>
+          <input id="lon" type="number" step="any" min="-180" max="180" value="76.9558" required>
+        </div>
+        <div class="form-group">
+          <label for="asking" data-en="Asking Price (₹/kg)" data-ta="கேட்கும் விலை (₹/கிலோ)">Asking Price (₹/kg)</label>
+          <input id="asking" type="number" min="0" value="12" required>
+        </div>
+        <div class="form-group">
+          <label for="urgency" data-en="Urgency Window (Hours)" data-ta="அவசரம் / சேமிப்பு நேரம் (மணிநேரம்)">Urgency Window (Hours)</label>
+          <input id="urgency" type="number" min="1" max="720" value="24" required>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary" data-en="🔍 Find Suitable Matches" data-ta="🔍 பொருத்தமான வாங்குபவர்களைக் காண்க">🔍 Find Suitable Matches</button>
+    </form>
+    <div id="listingStatus" class="status-msg hidden"></div>
+  </section>
+
+  <!-- Step 2: Buyer Matches -->
+  <section class="card" id="buyers">
+    <span class="badge">Step 2 / படி 2</span>
+    <h2 data-en="Recommended Nearby Buyers" data-ta="பரிந்துரைக்கப்படும் அருகிலுள்ள வாங்குபவர்கள்">Recommended Nearby Buyers</h2>
+    <p class="panel-sub" data-en="Filtered by crop, accepted grade condition, buyer capacity, and 100km radius. Ranked by estimated net return." data-ta="பயிர், தரம், கொள்ளளவு மற்றும் 100 கி.மீ சுற்றளவு அடிப்படையில் வடிகட்டப்பட்டு, அதிக நிகர வருமானத்தின்படி வரிசைப்படுத்தப்பட்டுள்ளது.">Filtered by crop, accepted grade condition, buyer capacity, and 100km radius. Ranked by estimated net return.</p>
+    <div id="buyerResults"><div class="placeholder-box" data-en="Submit a listing above or click a scenario to view matching buyer profiles." data-ta="பொருத்தமான வாங்குபவர்களைக் காண மேலே உள்ள படிவத்தை சமர்ப்பிக்கவும்.">Submit a listing above or click a scenario to view matching buyer profiles.</div></div>
+  </section>
+
+  <!-- Step 3: Transport Matches -->
+  <section class="card" id="transport">
+    <span class="badge">Step 3 / படி 3</span>
+    <h2 data-en="Recommended Local Transport Providers" data-ta="பரிந்துரைக்கப்படும் உள்ளூர் போக்குவரத்து ஓட்டுநர்கள்">Recommended Local Transport Providers</h2>
+    <p class="panel-sub" data-en="Filtered by active availability, load capacity, and distance. Sorted by lowest estimated fare." data-ta="செயலில் உள்ள இருப்பு, சுமை கொள்ளளவு மற்றும் தூரம் அடிப்படையில் வரிசைப்படுத்தப்பட்டுள்ளது.">Filtered by active availability, load capacity, and distance. Sorted by lowest estimated fare.</p>
+    <div id="driverResults"><div class="placeholder-box" data-en="Submit a listing above to view matching transport providers." data-ta="பொருத்தமான போக்குவரத்து ஓட்டுநர்களைக் காண படிவத்தை சமர்ப்பிக்கவும்.">Submit a listing above to view matching transport providers.</div></div>
+  </section>
+
+  <!-- Step 4: Photo Inspection -->
+  <section class="card" id="image">
+    <span class="badge">Step 4 / படி 4</span>
+    <h2 data-en="Produce Photo & Visual Inspection" data-ta="விளைபொருள் புகைப்படம் மற்றும் காட்சி ஆய்வு">Produce Photo & Visual Inspection</h2>
+    <p class="panel-sub" data-en="Upload a photo to communicate visible produce quality. Our endpoint returns a preliminary physical inspection checklist." data-ta="விளைபொருளின் நிலையை வாங்குபவருக்கு காட்ட புகைப்படம் எடுக்கவும் அல்லது பதிவேற்றவும்.">Upload a photo to communicate visible produce quality. Our endpoint returns a preliminary physical inspection checklist.</p>
+    <div style="margin-top:12px">
+      <input type="file" id="photo" accept="image/*">
+      <div id="previewContainer" class="preview-box hidden"><img id="preview" class="preview-img" alt="Produce Preview"></div>
+      <button type="button" id="assess" class="btn btn-secondary" style="margin-top:10px" data-en="🔬 Run Preliminary Visual Inspection" data-ta="🔬 ஆரம்ப நிலை காட்சி ஆய்வு செய்க">🔬 Run Preliminary Visual Inspection</button>
+    </div>
+    <div id="imageResultCard" class="inspection-card hidden"></div>
+  </section>
+
+  <!-- Step 5: Voice Listing -->
+  <section class="card" id="voice">
+    <span class="badge">Step 5 / படி 5</span>
+    <h2 data-en="Bilingual Voice-to-Text Listing (Tamil / English)" data-ta="இருமொழி குரல்வழி பதிவு (தமிழ் / ஆங்கிலம்)">Bilingual Voice-to-Text Listing (Tamil / English)</h2>
+    <p class="panel-sub" data-en="Speak in Tamil or Indian English to dictate surplus details. Click 'Extract to Form' to auto-populate fields." data-ta="விவசாயிகள் தங்கள் மொழியிலேயே பேசி விவரங்களை பதிவு செய்யலாம். பின்னர் 'படிவத்தில் நிரப்பு' பொத்தானை அழுத்தவும்.">Speak in Tamil or Indian English to dictate surplus details. Click 'Extract to Form' to auto-populate fields.</p>
+    <div class="voice-controls" style="margin-top:12px">
+      <label for="language" style="margin:0" data-en="Speech Language:" data-ta="பேச்சு மொழி:">Speech Language:</label>
+      <select id="language" style="width:auto">
+        <option value="ta-IN">தமிழ் - Tamil (ta-IN)</option>
+        <option value="en-IN">English (India - en-IN)</option>
+      </select>
+      <button type="button" id="speak" class="btn btn-accent" data-en="🎙 Start Voice Input" data-ta="🎙 குரல் பதிவு தொடங்கு">🎙 Start Voice Input</button>
+    </div>
+    <textarea id="transcript" placeholder="Example: 'Tomato 250 kg in Coimbatore asking price 12' or 'தக்காளி 250 கிலோ கோயம்புத்தூர்'..." rows="3"></textarea>
+    <div style="margin-top:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button type="button" id="btnExtractVoice" class="btn btn-secondary" style="padding:6px 14px;font-size:0.82rem" data-en="📥 Extract & Populate Listing Form" data-ta="📥 படிவத்தில் தானாக நிரப்பு">📥 Extract & Populate Listing Form</button>
+      <span id="voiceExtractStatus" style="font-size:0.85rem;font-weight:700"></span>
+    </div>
+  </section>
+
+  <!-- Step 6: Net Return Calculator -->
+  <section class="card" id="income">
+    <span class="badge">Step 6 / படி 6</span>
+    <h2 data-en="Transparent Net-Return Calculator" data-ta="வெளிப்படையான நிகர வருமானக் கணக்கீடு">Transparent Net-Return Calculator</h2>
+    <p class="panel-sub" data-en="Estimate true take-home earnings by subtracting transport, handling, and platform coordination costs from gross sale revenue." data-ta="மொத்த விற்பனைத் தொகையிலிருந்து போக்குவரத்து, கையாளுதல் செலவுகளைக் கழித்து உண்மையான நிகர வருமானத்தை கணக்கிடுங்கள்.">Estimate true take-home earnings by subtracting transport, handling, and platform coordination costs from gross sale revenue.</p>
+    <div class="grid-fields" style="margin-top:14px">
+      <div class="form-group">
+        <label for="iqty" data-en="Quantity (kg)" data-ta="அளவு (கிலோ)">Quantity (kg)</label>
+        <input id="iqty" type="number" value="500" min="0">
+      </div>
+      <div class="form-group">
+        <label for="offer" data-en="Buyer Offer (₹/kg)" data-ta="வாங்குபவர் விலை (₹/கிலோ)">Buyer Offer (₹/kg)</label>
+        <input id="offer" type="number" value="14" min="0">
+      </div>
+      <div class="form-group">
+        <label for="transportCost" data-en="Transport Cost (₹)" data-ta="போக்குவரத்து செலவு (₹)">Transport Cost (₹)</label>
+        <input id="transportCost" type="number" value="800" min="0">
+      </div>
+      <div class="form-group">
+        <label for="handling" data-en="Handling Cost (₹)" data-ta="கையாளுதல் செலவு (₹)">Handling Cost (₹)</label>
+        <input id="handling" type="number" value="250" min="0">
+      </div>
+      <div class="form-group">
+        <label for="fee" data-en="Platform Coordination Fee (₹)" data-ta="தள ஒருங்கிணைப்பு கட்டணம் (₹)">Platform Coordination Fee (₹)</label>
+        <input id="fee" type="number" value="0" min="0">
+      </div>
+    </div>
+    <button type="button" id="calc" class="btn btn-primary" data-en="🧮 Calculate Net Earnings" data-ta="🧮 நிகர வருமானத்தை கணக்கிடு">🧮 Calculate Net Earnings</button>
+    <div id="incomeResult" class="hidden" style="margin-top:16px;background:var(--green-pale);padding:18px;border-radius:10px;border:1px solid #c9e0cf"></div>
+  </section>
+
+  <!-- Step 7: Impact & SDGs -->
+  <section class="card" id="impact">
+    <span class="badge">Social Impact / சமூக தாக்கம்</span>
+    <h2 data-en="Pilot Metrics & UN Sustainable Development Goals" data-ta="திட்ட அளவீடுகள் & ஐக்கிய நாடுகள் இலக்குகள்">Pilot Metrics & UN Sustainable Development Goals</h2>
+    <p class="panel-sub" data-en="Indicators to track in field pilots across rural markets and Women SHG aggregation clusters." data-ta="கிராமப்புற சந்தைகள் மற்றும் மகளிர் சுயஉதவி குழுக்களில் அளவிடப்பட வேண்டிய குறிகாட்டிகள்.">Indicators to track in field pilots across rural markets and Women SHG aggregation clusters.</p>
+    <div class="metrics-grid" style="margin-top:16px">
+      <div class="metric-card"><span class="metric-unit">kg</span><span class="metric-label" data-en="Surplus Perishables Rescued" data-ta="மீட்கப்பட்ட அழுகக்கூடிய உபரி">Surplus Perishables Rescued</span></div>
+      <div class="metric-card"><span class="metric-unit">₹</span><span class="metric-label" data-en="Net Income Protected for Sellers" data-ta="விவசாயிகளுக்கு பாதுகாக்கப்பட்ட வருமானம்">Net Income Protected for Sellers</span></div>
+      <div class="metric-card"><span class="metric-unit">#</span><span class="metric-label" data-en="Verified Multi-Buyer Matches" data-ta="வெற்றிகரமான வாங்குபவர் இணைப்புகள்">Verified Multi-Buyer Matches</span></div>
+      <div class="metric-card"><span class="metric-unit">#</span><span class="metric-label" data-en="Women SHG & Youth Earning Roles" data-ta="மகளிர் குழு & இளைஞர் வேலைவாய்ப்புகள்">Women SHG & Youth Earning Roles</span></div>
+    </div>
+    <div class="sdg-tags">
+      <span class="sdg-badge">🎯 SDG 1: No Poverty</span>
+      <span class="sdg-badge">🌾 SDG 2: Zero Hunger</span>
+      <span class="sdg-badge">💼 SDG 8: Decent Work & Economic Growth</span>
+      <span class="sdg-badge">🏭 SDG 9: Industry & Innovation</span>
+      <span class="sdg-badge">♻️ SDG 12: Responsible Consumption</span>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><strong>AgroRescue</strong> — Social Clause Hackathon Prototype • Rural Development and Livelihood Track</p>
+    <p style="font-size:0.78rem;color:#7b8f82;margin-top:4px">Built with Python, FastAPI, HTML5 & JavaScript • MIT License</p>
+  </div>
+</footer>
+
+<script>
+let currentLang = "en";
+function esc(s) {
+  if (s === null || s === undefined) return "";
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+const i18n = {
+  en: {
+    langBtn: "🌐 தமிழ் (Tamil)",
+    statusFinding: "Searching demo database for suitable buyers and transport within 100 km…",
+    statusSuccess: "Recommendations generated from fictional sample data. No commercial contract made.",
+    statusError: "Could not fetch recommendations: ",
+    noBuyerMatches: "No matching buyers found within 100 km for this crop/condition. Try adjusting location.",
+    noDriverMatches: "No available transport providers found with sufficient capacity within 100 km.",
+    tableNote: "Illustrative demo estimates only. Confirm stock, grade, price, pickup, and payment directly.",
+    choosePhotoFirst: "Please select a produce photo first.",
+    buyerCols: ["Rank & Buyer", "Distance", "Offer", "Est. Transport", "Est. Net Return"],
+    driverCols: ["Driver", "Vehicle", "Capacity", "Distance", "Est. Fare", "Contact"]
+  },
+  ta: {
+    langBtn: "🌐 English",
+    statusFinding: "100 கி.மீ சுற்றளவில் உள்ள வாங்குபவர்கள் மற்றும் வாகனங்களை தேடுகிறது…",
+    statusSuccess: "மாதிரித் தரவுகளின்படி பரிந்துரைகள் வழங்கப்பட்டுள்ளன. இது நேரடி விற்பனை அல்ல.",
+    statusError: "பரிந்துரைகளைப் பெற முடியவில்லை: ",
+    noBuyerMatches: "இந்த பயிர் அல்லது அளவிற்கு 100 கி.மீ சுற்றளவில் வாங்குபவர்கள் இல்லை.",
+    noDriverMatches: "இந்த சுமை அளவிற்கு 100 கி.மீ சுற்றளவில் வாகன ஓட்டுநர்கள் கிடைக்கவில்லை.",
+    tableNote: "மாதிரி மதிப்பீடுகள் மட்டுமே. தரம், விலை, வாகனம் மற்றும் கட்டணங்களை நேரில் உறுதிசெய்க.",
+    choosePhotoFirst: "முதலில் ஒரு புகைப்படத்தை தேர்வு செய்யவும்.",
+    buyerCols: ["வாங்குபவர்", "தூரம்", "விலை", "போக்குவரத்து", "நிகர வருமானம்"],
+    driverCols: ["ஓட்டுநர்", "வாகனம்", "கொள்ளளவு", "தூரம்", "கட்டணம்", "தொடர்பு"]
+  }
+};
+
+function setLanguage(lang) {
+  currentLang = lang;
+  document.documentElement.lang = lang;
+  const t = i18n[lang];
+  document.querySelector("#langToggle").textContent = t.langBtn;
+  document.querySelectorAll("[data-en][data-ta]").forEach(el => {
+    const text = el.getAttribute(`data-${lang}`);
+    if (text) el.textContent = text;
+  });
+  if (window.lastBuyerMatches) renderBuyerTable(window.lastBuyerMatches);
+  if (window.lastDriverMatches) renderDriverTable(window.lastDriverMatches);
+}
+
+document.querySelector("#langToggle").addEventListener("click", () => {
+  setLanguage(currentLang === "en" ? "ta" : "en");
+});
+
+function makeListing() {
+  return {
+    crop: document.querySelector("#crop").value.trim(),
+    quantity_kg: Number(document.querySelector("#qty").value),
+    condition: document.querySelector("#condition").value.trim(),
+    location_name: document.querySelector("#location").value.trim(),
+    lat: Number(document.querySelector("#lat").value),
+    lon: Number(document.querySelector("#lon").value),
+    asking_price_per_kg: Number(document.querySelector("#asking").value),
+    urgency_hours: Number(document.querySelector("#urgency").value)
+  };
+}
+
+function applyPreset(crop, qty, cond, loc, lat, lon, price, urgency) {
+  document.querySelector("#crop").value = crop;
+  document.querySelector("#qty").value = qty;
+  document.querySelector("#condition").value = cond;
+  document.querySelector("#location").value = loc;
+  document.querySelector("#lat").value = lat;
+  document.querySelector("#lon").value = lon;
+  document.querySelector("#asking").value = price;
+  document.querySelector("#urgency").value = urgency;
+  document.querySelector("#listingForm").dispatchEvent(new Event("submit"));
+}
+
+document.querySelector("#presetAyudha").addEventListener("click", () => applyPreset("Vegetables", 200, "Fresh / saleable", "Coimbatore", 11.0168, 76.9558, 12, 24));
+document.querySelector("#presetMango").addEventListener("click", () => applyPreset("Mango", 600, "Ripe / suitable for processing", "Salem", 11.6643, 78.1460, 11, 24));
+document.querySelector("#presetFlower").addEventListener("click", () => applyPreset("Flowers", 80, "Fresh / saleable", "Coimbatore", 11.0168, 76.9558, 6, 6));
+
+function renderBuyerTable(matches) {
+  window.lastBuyerMatches = matches;
+  const el = document.querySelector("#buyerResults");
+  const t = i18n[currentLang];
+  if (!matches || !matches.length) {
+    el.innerHTML = `<div class="placeholder-box">${esc(t.noBuyerMatches)}</div>`;
+    return;
+  }
+  let html = `<div class="table-responsive"><table><thead><tr>${t.buyerCols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`;
+  matches.forEach((m, idx) => {
+    html += `<tr>
+      <td><span class="rank-pill">#${idx+1}</span><strong>${esc(m.buyer_name)}</strong><br><small style="color:var(--muted)">Cap: ${esc(m.capacity_kg)} kg</small></td>
+      <td>${esc(m.distance_km)} km</td>
+      <td>₹${esc(m.offer_per_kg)}</td>
+      <td>₹${esc(m.estimated_transport_cost)}</td>
+      <td class="return-highlight">₹${esc(m.estimated_net_return)}</td>
+    </tr>`;
+  });
+  html += `</tbody></table></div><div class="demo-tag">DEMO DATA • FICTIONAL BUYERS</div><p class="panel-sub" style="margin-top:6px;font-size:0.8rem">${esc(t.tableNote)}</p>`;
+  el.innerHTML = html;
+}
+
+function renderDriverTable(matches) {
+  window.lastDriverMatches = matches;
+  const el = document.querySelector("#driverResults");
+  const t = i18n[currentLang];
+  if (!matches || !matches.length) {
+    el.innerHTML = `<div class="placeholder-box">${esc(t.noDriverMatches)}</div>`;
+    return;
+  }
+  let html = `<div class="table-responsive"><table><thead><tr>${t.driverCols.map(c=>`<th>${c}</th>`).join("")}</tr></thead><tbody>`;
+  matches.forEach(m => {
+    html += `<tr>
+      <td><strong>${esc(m.driver_name)}</strong></td>
+      <td>${esc(m.vehicle)}</td>
+      <td>${esc(m.capacity_kg)} kg</td>
+      <td>${esc(m.distance_km)} km</td>
+      <td><strong>₹${esc(m.estimated_cost)}</strong></td>
+      <td><small>${esc(m.phone)}</small></td>
+    </tr>`;
+  });
+  html += `</tbody></table></div><div class="demo-tag">DEMO DATA • FICTIONAL DRIVERS</div><p class="panel-sub" style="margin-top:6px;font-size:0.8rem">${esc(t.tableNote)}</p>`;
+  el.innerHTML = html;
+}
+
+document.querySelector("#listingForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const status = document.querySelector("#listingStatus");
+  const t = i18n[currentLang];
+  const payload = makeListing();
+  status.className = "status-msg loading";
+  status.textContent = t.statusFinding;
+  status.classList.remove("hidden");
+  try {
+    const [bRes, dRes] = await Promise.all([
+      fetch("/api/matches/buyers", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) }),
+      fetch("/api/matches/transport", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) })
+    ]);
+    if (!bRes.ok || !dRes.ok) throw new Error("Validation or server error occurred.");
+    const bData = await bRes.json();
+    const dData = await dRes.json();
+    renderBuyerTable(bData.matches);
+    renderDriverTable(dData.matches);
+    status.className = "status-msg";
+    status.textContent = t.statusSuccess;
+  } catch (err) {
+    status.className = "status-msg error";
+    status.textContent = `${t.statusError} ${err.message}`;
+  }
+});
+
+const photoInput = document.querySelector("#photo");
+photoInput.addEventListener("change", () => {
+  const f = photoInput.files[0];
+  if (f) {
+    document.querySelector("#preview").src = URL.createObjectURL(f);
+    document.querySelector("#previewContainer").classList.remove("hidden");
+  }
+});
+
+document.querySelector("#assess").addEventListener("click", async () => {
+  const file = photoInput.files[0];
+  const card = document.querySelector("#imageResultCard");
+  const t = i18n[currentLang];
+  if (!file) { alert(t.choosePhotoFirst); return; }
+  card.classList.remove("hidden");
+  card.innerHTML = `<p class="status-msg loading">Inspecting image...</p>`;
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const res = await fetch("/api/image-assessment", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    card.innerHTML = `
+      <h3>🔍 Visual Inspection Checklist (Demo)</h3>
+      <p style="font-size:0.85rem;color:var(--muted)">File: ${esc(data.filename)} • Status: <span class="badge">${esc(data.status)}</span></p>
+      <ul class="checklist">${(data.possible_visual_checks||[]).map(c=>`<li>✓ ${esc(c)}</li>`).join("")}</ul>
+      <p style="font-size:0.85rem;margin-top:6px">${esc(data.recommended_next_step)}</p>
+      <div class="safety-warning">⚠️ <strong>Notice:</strong> ${esc(data.warning)}</div>
+    `;
+  } catch (err) {
+    card.innerHTML = `<div class="status-msg error">Error: ${esc(err.message)}</div>`;
+  }
+});
+
+// Voice Speech Recognition
+document.querySelector("#speak").addEventListener("click", () => {
+  const out = document.querySelector("#transcript");
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { out.value = "Speech recognition is not supported in this browser. Please type directly into the form."; return; }
+  const rec = new SR();
+  rec.lang = document.querySelector("#language").value;
+  out.value = "Listening... Speak now...";
+  rec.onresult = e => { out.value = e.results[0][0].transcript; };
+  rec.onerror = e => { out.value = "Speech error: " + e.error; };
+  try { rec.start(); } catch(e){}
+});
+
+document.querySelector("#btnExtractVoice").addEventListener("click", () => {
+  const text = document.querySelector("#transcript").value.toLowerCase();
+  const st = document.querySelector("#voiceExtractStatus");
+  let found = [];
+  if (text.includes("tomato") || text.includes("தக்காளி")) { document.querySelector("#crop").value = "Tomato"; found.push("Tomato"); }
+  else if (text.includes("mango") || text.includes("மாம்பழம்")) { document.querySelector("#crop").value = "Mango"; found.push("Mango"); }
+  else if (text.includes("banana") || text.includes("வாழை")) { document.querySelector("#crop").value = "Banana"; found.push("Banana"); }
+  else if (text.includes("flower") || text.includes("பூ")) { document.querySelector("#crop").value = "Flowers"; found.push("Flowers"); }
+  const m = text.match(/(\\d+)/);
+  if (m && Number(m[1]) > 0) { document.querySelector("#qty").value = m[1]; found.push(m[1] + " kg"); }
+  if (text.includes("coimbatore") || text.includes("கோவை") || text.includes("கோயம்புத்தூர்")) {
+    document.querySelector("#location").value = "Coimbatore"; document.querySelector("#lat").value = 11.0168; document.querySelector("#lon").value = 76.9558; found.push("Coimbatore");
+  } else if (text.includes("salem") || text.includes("சேலம்")) {
+    document.querySelector("#location").value = "Salem"; document.querySelector("#lat").value = 11.6643; document.querySelector("#lon").value = 78.1460; found.push("Salem");
+  }
+  st.textContent = found.length ? "Extracted: " + found.join(", ") : "Could not identify crop/qty.";
+});
+
+document.querySelector("#calc").addEventListener("click", async () => {
+  const resCard = document.querySelector("#incomeResult");
+  const payload = {
+    quantity_kg: Number(document.querySelector("#iqty").value),
+    offer_per_kg: Number(document.querySelector("#offer").value),
+    transport_cost: Number(document.querySelector("#transportCost").value),
+    handling_cost: Number(document.querySelector("#handling").value),
+    platform_fee: Number(document.querySelector("#fee").value)
+  };
+  try {
+    const res = await fetch("/api/net-return", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.detail || res.statusText);
+    resCard.classList.remove("hidden");
+    resCard.innerHTML = `
+      <div style="font-weight:750;color:var(--green-dark)">📊 Net Economic Breakdown:</div>
+      <div class="income-grid">
+        <div class="income-stat"><div class="income-stat-label">Gross Revenue</div><div class="income-stat-val">₹${j.gross_revenue}</div></div>
+        <div class="income-stat"><div class="income-stat-label">Total Costs</div><div class="income-stat-val" style="color:#a83232">₹${j.total_costs}</div></div>
+        <div class="income-stat highlight"><div class="income-stat-label">Net Return</div><div class="income-stat-val">₹${j.net_return}</div><small style="color:var(--green-dark)">₹${j.net_return_per_kg}/kg</small></div>
+      </div>
+    `;
+  } catch (err) {
+    resCard.classList.remove("hidden");
+    resCard.innerHTML = `<div class="status-msg error">Error: ${esc(err.message)}</div>`;
+  }
+});
+</script>
+</body>
+</html>
+"""
+
+# ==============================================================================
+# SECTION 4: SERVER IMPLEMENTATION (FastAPI Engine + Stdlib Fallback)
+# ==============================================================================
+def create_fastapi_app():
+    """Instantiates a production-ready FastAPI application with Pydantic validation."""
+    from fastapi import FastAPI, HTTPException, UploadFile, File
+    from fastapi.responses import HTMLResponse
+    from fastapi.middleware.cors import CORSMiddleware
+    from pydantic import BaseModel, Field, field_validator
+
+    app = FastAPI(
+        title="AgroRescue API",
+        version="0.2.0",
+        description="AgroRescue: AI-Powered Agricultural Surplus Recovery & Income Generation Platform (Phase A Hackathon Demo).",
+        docs_url="/docs",
+        redoc_url="/redoc"
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    class ListingModel(BaseModel):
+        id: str = None
+        crop: str = Field(..., min_length=2, max_length=60)
+        quantity_kg: float = Field(..., gt=0, le=1_000_000)
+        condition: str = Field(..., min_length=2, max_length=100)
+        location_name: str = Field(..., min_length=2, max_length=100)
+        lat: float = Field(..., ge=-90.0, le=90.0)
+        lon: float = Field(..., ge=-180.0, le=180.0)
+        asking_price_per_kg: float = Field(..., ge=0, le=100_000)
+        urgency_hours: int = Field(..., gt=0, le=720)
+
+        @field_validator("crop", "condition", "location_name")
+        @classmethod
+        def strip_text(cls, v: str) -> str:
+            s = v.strip()
+            if not s:
+                raise ValueError("Field cannot be blank")
+            return s
+
+    class ReturnModel(BaseModel):
+        quantity_kg: float = Field(..., ge=0, le=1_000_000)
+        offer_per_kg: float = Field(..., ge=0, le=100_000)
+        transport_cost: float = Field(default=0.0, ge=0)
+        handling_cost: float = Field(default=0.0, ge=0)
+        platform_fee: float = Field(default=0.0, ge=0)
+
+    @app.get("/", response_class=HTMLResponse)
+    def serve_ui():
+        return HTML_CONTENT
+
+    @app.get("/api/health")
+    def health():
+        return {
+            "status": "ok",
+            "project": "AgroRescue",
+            "title": "AgroRescue: AI-Powered Agricultural Surplus Recovery and Income Generation Platform",
+            "version": "0.2.0",
+            "mode": "demo_proof_of_concept",
+            "theme": "Rural Development and Livelihood"
+        }
+
+    @app.get("/api/buyers")
+    def get_buyers():
+        return SAMPLE_BUYERS
+
+    @app.get("/api/drivers")
+    def get_drivers():
+        return SAMPLE_DRIVERS
+
+    @app.get("/api/listings")
+    def get_listings():
+        return SAMPLE_LISTINGS
+
+    @app.post("/api/matches/buyers")
+    def match_buyers(listing: ListingModel):
+        matches = find_buyer_matches(listing.model_dump(), SAMPLE_BUYERS)
+        return {"matches": matches, "count": len(matches), "disclaimer": "Sample matches from fictional demo data."}
+
+    @app.post("/api/matches/transport")
+    def match_transport(listing: ListingModel):
+        matches = find_transport_matches(listing.model_dump(), SAMPLE_DRIVERS)
+        return {"matches": matches, "count": len(matches), "disclaimer": "Sample drivers from fictional demo data."}
+
+    @app.post("/api/net-return")
+    def calc_return(req: ReturnModel):
+        try:
+            return net_return(req.quantity_kg, req.offer_per_kg, req.transport_cost, req.handling_cost, req.platform_fee)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/api/image-assessment")
+    async def assess_image(file: UploadFile = File(...)):
+        if not file.content_type or not file.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="Uploaded file must have an image MIME type (e.g. image/jpeg, image/png).")
+        content = await file.read()
+        if len(content) > 8 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Image must be 8 MB or smaller.")
+        if len(content) == 0:
+            raise HTTPException(status_code=400, detail="Uploaded image is empty (0 bytes).")
+        try:
+            return preliminary_image_assessment(file.filename or "upload.jpg", file.content_type, len(content))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    return app
+
+def run_stdlib_server(host="127.0.0.1", port=8000):
+    """Fallback server using pure Python standard library (Zero third-party packages required)."""
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    from urllib.parse import urlparse
+
+    class AgroHandler(BaseHTTPRequestHandler):
+        def _send_json(self, status: int, data: Any):
+            body = json.dumps(data).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _send_html(self, status: int, html_text: str):
+            body = html_text.encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            parsed = urlparse(self.path)
+            path = parsed.path
+            if path in ["/", "/index.html"]:
+                self._send_html(200, HTML_CONTENT)
+            elif path == "/api/health":
+                self._send_json(200, {
+                    "status": "ok",
+                    "project": "AgroRescue",
+                    "engine": "stdlib_http_server",
+                    "version": "0.2.0",
+                    "mode": "demo_proof_of_concept"
+                })
+            elif path == "/api/buyers":
+                self._send_json(200, SAMPLE_BUYERS)
+            elif path == "/api/drivers":
+                self._send_json(200, SAMPLE_DRIVERS)
+            elif path == "/api/listings":
+                self._send_json(200, SAMPLE_LISTINGS)
+            else:
+                self._send_json(404, {"detail": "Not Found"})
+
+        def do_POST(self):
+            parsed = urlparse(self.path)
+            path = parsed.path
+            content_len = int(self.headers.get("Content-Length", 0))
+            raw_body = self.rfile.read(content_len)
+
+            if path == "/api/matches/buyers":
+                try:
+                    payload = json.loads(raw_body.decode("utf-8"))
+                    matches = find_buyer_matches(payload, SAMPLE_BUYERS)
+                    self._send_json(200, {"matches": matches, "count": len(matches)})
+                except Exception as err:
+                    self._send_json(400, {"detail": str(err)})
+
+            elif path == "/api/matches/transport":
+                try:
+                    payload = json.loads(raw_body.decode("utf-8"))
+                    matches = find_transport_matches(payload, SAMPLE_DRIVERS)
+                    self._send_json(200, {"matches": matches, "count": len(matches)})
+                except Exception as err:
+                    self._send_json(400, {"detail": str(err)})
+
+            elif path == "/api/net-return":
+                try:
+                    p = json.loads(raw_body.decode("utf-8"))
+                    res = net_return(p["quantity_kg"], p["offer_per_kg"], p.get("transport_cost", 0), p.get("handling_cost", 0), p.get("platform_fee", 0))
+                    self._send_json(200, res)
+                except Exception as err:
+                    self._send_json(400, {"detail": str(err)})
+
+            elif path == "/api/image-assessment":
+                ctype = self.headers.get("Content-Type", "")
+                if "image" not in ctype and "multipart" not in ctype:
+                    self._send_json(400, {"detail": "Uploaded file must be an image"})
+                    return
+                res = preliminary_image_assessment("upload.jpg", "image/jpeg", max(len(raw_body), 1024))
+                self._send_json(200, res)
+            else:
+                self._send_json(404, {"detail": "Not Found"})
+
+    server = HTTPServer((host, port), AgroHandler)
+    print("\n=======================================================")
+    print("AgroRescue Standalone Server Running (Zero-Dependency Engine)")
+    print(f"Access Web Application: http://{host}:{port}")
+    print("=======================================================\n")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nStopping server.")
+        server.server_close()
+
+# ==============================================================================
+# SECTION 5: EMBEDDED AUTOMATED SELF-TEST SUITE
+# ==============================================================================
+def run_embedded_tests():
+    """Runs a complete unit and integration test suite directly from this file."""
+    import unittest
+
+    class TestAgroRescueSingleFile(unittest.TestCase):
+        def test_haversine_same_point(self):
+            self.assertAlmostEqual(haversine_km(11.0, 76.0, 11.0, 76.0), 0.0, places=3)
+
+        def test_haversine_distance(self):
+            d = haversine_km(11.0168, 76.9558, 11.6643, 78.1460)
+            self.assertTrue(140 < d < 160)
+
+        def test_net_return_valid(self):
+            r = net_return(100, 12, 100, 50, 0)
+            self.assertEqual(r["gross_revenue"], 1200.0)
+            self.assertEqual(r["total_costs"], 150.0)
+            self.assertEqual(r["net_return"], 1050.0)
+            self.assertEqual(r["net_return_per_kg"], 10.5)
+
+        def test_net_return_negative_rejected(self):
+            with self.assertRaises(ValueError):
+                net_return(100, 12, -10, 0, 0)
+
+        def test_net_return_zero_quantity(self):
+            r = net_return(0, 12, 0, 0, 0)
+            self.assertEqual(r["net_return_per_kg"], 0.0)
+
+        def test_buyer_matching(self):
+            listing = {"crop": "Mango", "quantity_kg": 100, "condition": "Ripe / suitable for processing", "lat": 11.6643, "lon": 78.1460}
+            matches = find_buyer_matches(listing, SAMPLE_BUYERS)
+            self.assertGreater(len(matches), 0)
+            self.assertEqual(matches[0]["buyer_id"], "B003")
+
+        def test_buyer_capacity_filter(self):
+            listing = {"crop": "Mango", "quantity_kg": 6000, "condition": "Ripe / suitable for processing", "lat": 11.6643, "lon": 78.1460}
+            matches = find_buyer_matches(listing, SAMPLE_BUYERS)
+            self.assertEqual(len(matches), 0)
+
+        def test_transport_availability(self):
+            listing = {"quantity_kg": 200, "lat": 11.0168, "lon": 76.9558}
+            matches = find_transport_matches(listing, SAMPLE_DRIVERS)
+            for m in matches:
+                self.assertNotEqual(m["driver_id"], "D004")
+
+        def test_image_assessment_placeholder(self):
+            r = preliminary_image_assessment("tomato.jpg", "image/jpeg", 500)
+            self.assertEqual(r["status"], "demo_placeholder")
+            self.assertIn("cannot certify food safety", r["warning"])
+
+        def test_image_assessment_non_image_rejected(self):
+            with self.assertRaises(ValueError):
+                preliminary_image_assessment("notes.txt", "text/plain", 100)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestAgroRescueSingleFile)
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
+    sys.exit(0 if result.wasSuccessful() else 1)
+
+# ==============================================================================
+# SECTION 6: ENTRY POINT & SERVER LAUNCHER
+# ==============================================================================
+if __name__ == "__main__":
+    if "--test" in sys.argv:
+        print("\nRunning AgroRescue Embedded Automated Test Suite...\n")
+        run_embedded_tests()
+
+    try:
+        import fastapi
+        import uvicorn
+        fastapi_available = True
+    except ImportError:
+        fastapi_available = False
+
+    if fastapi_available:
+        print("\n=======================================================")
+        print("AgroRescue Platform: Starting with FastAPI & Uvicorn")
+        print("Web Application:       http://127.0.0.1:8000")
+        print("Interactive Docs:      http://127.0.0.1:8000/docs")
+        print("Health Check:          http://127.0.0.1:8000/api/health")
+        print("=======================================================\n")
+        app = create_fastapi_app()
+        uvicorn.run(app, host="127.0.0.1", port=8000)
+    else:
+        print("\nNotice: FastAPI/Uvicorn not detected in current environment.")
+        print("Falling back seamlessly to built-in Python http.server engine...\n")
+        run_stdlib_server(host="127.0.0.1", port=8000)
