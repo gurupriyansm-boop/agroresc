@@ -1,0 +1,43 @@
+======================================================================
+AgroRescue Phase A Test Suite Results
+Environment: Python 3.13.14 on Windows (AMD64)
+Command: .\.venv\Scripts\python -m unittest discover -s tests -v
+Date: 2026-10-21
+======================================================================
+
+test_get_buyers (test_api.AgroRescueApiTests.test_get_buyers) ... ok
+test_get_drivers (test_api.AgroRescueApiTests.test_get_drivers) ... ok
+test_get_listings (test_api.AgroRescueApiTests.test_get_listings) ... ok
+test_health_endpoint (test_api.AgroRescueApiTests.test_health_endpoint) ... ok
+test_image_assessment_empty_rejected (test_api.AgroRescueApiTests.test_image_assessment_empty_rejected) ... ok
+test_image_assessment_non_image_rejected (test_api.AgroRescueApiTests.test_image_assessment_non_image_rejected) ... ok
+test_image_assessment_valid_upload (test_api.AgroRescueApiTests.test_image_assessment_valid_upload) ... ok
+test_post_buyer_matches_invalid_payload (test_api.AgroRescueApiTests.test_post_buyer_matches_invalid_payload) ... ok
+test_post_buyer_matches_no_match (test_api.AgroRescueApiTests.test_post_buyer_matches_no_match) ... ok
+test_post_buyer_matches_valid (test_api.AgroRescueApiTests.test_post_buyer_matches_valid) ... ok
+test_post_buyer_matches_zero_quantity_rejected (test_api.AgroRescueApiTests.test_post_buyer_matches_zero_quantity_rejected) ... ok
+test_post_net_return_negative_rejected (test_api.AgroRescueApiTests.test_post_net_return_negative_rejected) ... ok
+test_post_net_return_valid (test_api.AgroRescueApiTests.test_post_net_return_valid) ... ok
+test_post_transport_matches (test_api.AgroRescueApiTests.test_post_transport_matches) ... ok
+test_static_css_serving (test_api.AgroRescueApiTests.test_static_css_serving) ... ok
+test_static_index_serving (test_api.AgroRescueApiTests.test_static_index_serving) ... ok
+test_static_js_serving (test_api.AgroRescueApiTests.test_static_js_serving) ... ok
+test_buyer_capacity_filter (test_services.AgroRescueServiceTests.test_buyer_capacity_filter) ... ok
+test_buyer_case_insensitivity (test_services.AgroRescueServiceTests.test_buyer_case_insensitivity) ... ok
+test_buyer_match (test_services.AgroRescueServiceTests.test_buyer_match) ... ok
+test_distance_known_points (test_services.AgroRescueServiceTests.test_distance_known_points) ... ok
+test_distance_same_point (test_services.AgroRescueServiceTests.test_distance_same_point) ... ok
+test_driver_capacity_and_availability (test_services.AgroRescueServiceTests.test_driver_capacity_and_availability) ... ok
+test_driver_sorting_by_cost_and_distance (test_services.AgroRescueServiceTests.test_driver_sorting_by_cost_and_distance) ... ok
+test_empty_image_rejected (test_services.AgroRescueServiceTests.test_empty_image_rejected) ... ok
+test_image_assessment_is_honest_placeholder (test_services.AgroRescueServiceTests.test_image_assessment_is_honest_placeholder) ... ok
+test_image_assessment_sanitizes_path_traversal (test_services.AgroRescueServiceTests.test_image_assessment_sanitizes_path_traversal) ... ok
+test_negative_cost_rejected (test_services.AgroRescueServiceTests.test_negative_cost_rejected) ... ok
+test_net_return (test_services.AgroRescueServiceTests.test_net_return) ... ok
+test_non_image_rejected (test_services.AgroRescueServiceTests.test_non_image_rejected) ... ok
+test_zero_quantity (test_services.AgroRescueServiceTests.test_zero_quantity) ... ok
+
+----------------------------------------------------------------------
+Ran 31 tests in 0.260s
+
+OK
