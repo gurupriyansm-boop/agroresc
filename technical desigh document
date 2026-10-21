@@ -1,0 +1,80 @@
+📖 ARCHITECTURE DOCUMENTATION
+================================================================================
+AgroRescue connects rural smallholders, market vendors, and Women Self-Help
+Groups (SHGs) facing perishable produce oversupply with commercial buyers,
+food processing units, and local transport operators before spoilage occurs.
+System Topology:
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                            CLIENT TIER (BROWSER)                             │
+│  - Bilingual Responsive Web UI (English / தமிழ் - Tamil)                    │
+│  - One-Click Hackathon Scenarios (Ayudha Pooja gluts, Salem Mangoes, Flowers)│
+│  - Browser SpeechRecognition (ta-IN / en-IN) with Automatic Entity Parsing   │
+│  - Produce Camera Capture & Visual Inspection Checklist                      │
+│  - Transparent Net-Return Economics Calculator (Gross - Transport - Fees)    │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       │ HTTP REST JSON / Multipart
+┌──────────────────────────────────────▼───────────────────────────────────────┐
+│                          APPLICATION & API TIER                              │
+│  - Dual-Engine Server: FastAPI (High performance + Swagger /docs)            │
+│                       Stdlib http.server fallback (Zero-dependency run)      │
+│  - Input Validation & Sanitization (Lat/Lon ranges, Positive economics)       │
+│  - File Upload Streamer (8 MB cap, path traversal protection)                │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       │
+┌──────────────────────────────────────▼───────────────────────────────────────┐
+│                        SERVICES & MATCHING ENGINES                           │
+│  1. Geospatial Engine: Haversine great-circle distance (km)                 │
+│  2. Buyer Matcher: Filter by crop, condition, buyer capacity >= quantity,    │
+│                    and distance <= 100km. Rank by Estimated Net Return (₹).   │
+│  3. Logistics Matcher: Filter by available status, capacity, and distance.   │
+│                        Rank by Estimated Transport Fare (₹).                 │
+│  4. Economics Engine: Net Return = (Qty * Offer) - Transport - Handling - Fee│
+│  5. Visual Assessment Checklist: Safe rule-based physical quality indicators │
+│                                  (Honest placeholder, not trained AI)       │
+└──────────────────────────────────────┬───────────────────────────────────────┘
+                                       │
+┌──────────────────────────────────────▼───────────────────────────────────────┐
+│                              DATA PERSISTENCE                                │
+│  - Embedded reference datasets (Buyers, Drivers, Surplus Listings)          │
+│  - Fully self-contained single-file runtime with zero external file needs   │
+└──────────────────────────────────────────────────────────────────────────────┘
+Mathematical Models:
+1. Haversine Great-Circle Distance:
+   a = sin²(Δlat / 2) + cos(lat1) * cos(lat2) * sin²(Δlon / 2)
+   d = 2 * R * atan2(√a, √(1 - a))  where R = 6371.0 km
+2. Net Return Economics:
+   Gross Revenue = Quantity (kg) * Buyer Offer (₹/kg)
+   Total Costs   = Transport Cost + Handling Cost + Platform Fee
+   Net Return    = Gross Revenue - Total Costs
+   Net Return/kg = Net Return / Quantity (kg)
+================================================================================
+🚀 DETAILED SETUP & RUN INSTRUCTIONS
+================================================================================
+Method A: Run with FastAPI & Uvicorn (Recommended for Swagger UI)
+1. Install dependencies:
+   pip install fastapi uvicorn pydantic python-multipart
+2. Start the server:
+   python agrorescue_complete.py
+3. Open in browser:
+   - Web Application: http://127.0.0.1:8000
+   - Interactive Swagger API Docs: http://127.0.0.1:8000/docs
+   - Health Status: http://127.0.0.1:8000/api/health
+Method B: Run with Zero Dependencies (Standard Python 3.8+)
+1. No pip install required! Simply run:
+   python agrorescue_complete.py
+   (The script automatically detects if FastAPI is absent and falls back to
+    Python's built-in http.server, serving the full web app & all JSON APIs!)
+Method C: Run Embedded Automated Test Suite
+   python agrorescue_complete.py --test
+================================================================================
+📦 GITHUB REPOSITORY PUBLISHING INSTRUCTIONS FOR HACKATHON
+================================================================================
+1. Create a new public repository on GitHub named: agrorescue
+2. In your project directory, run:
+   git init
+   git add agrorescue_complete.py
+   git commit -m "AgroRescue: AI-Powered Agricultural Surplus Recovery Platform"
+   git branch -M main
+   git remote add origin https://github.com/YOUR-USERNAME/agrorescue.git
+   git push -u origin main
+3. Your submission link: https://github.com/YOUR-USERNAME/agrorescue
